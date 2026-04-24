@@ -1,0 +1,1841 @@
+// calculator.mas
+/ A MARIE assembly calculator; It accepts a string input, ends with "=?";
+/ Extracts 2 operands, integer X and Y, and user defined operator; 
+/ Accepted operator: '+', '-', '*', '/' (acceptable operators can be redefined from ascii table)
+/ Then, perform arithmetic calculation, Output to "output log" and "16x16 Display".
+/ This program is Free Software; any individual can study, modify and redistribute the program for any purpose
+
+/ Calling SubInputAndExtractOperandsAndOperator subroutine.
+JnS SubInputAndExtractOperandsAndOperator
+
+/ Calling SubCal subroutine.
+JnS SubCal
+
+/ Calling SubTextOutput subroutine.
+JnS SubTextOutput
+
+/ Calling SubClearDisplay subroutine.
+JnS SubClearDisplay
+
+/ Calling SubPaintChar subroutine.
+Load DigitFontAddr
+Add NEXTDIGIT 
+Store PaintCharCharacter 
+Load PIXELOFROW2COL2 
+Store PaintCharDisplay 
+JnS SubPaintChar 
+
+/ Calling SubPrintCalResultToDisplay subroutine.
+JnS SubPrintCalResultToDisplay
+
+/ End of main program.
+Halt
+
+// Helpful subroutines for main program
+
+/ Multiply current input digit by 10
+SubMul10,	HEX 0
+			Store MulTmp
+			Add MulTmp
+			Store MulTmp
+			Add MulTmp
+			Add MulTmp
+			Add MulTmp
+			Add MulTmp / Build multiple digits integer input
+			JumpI SubMul10
+			
+MulTmp,	DEC 0
+
+/ Negate X if X < 0
+CheckNegativeX,	HEX 0
+				Load NegativeXFlag
+				SkipCond 800
+				JumpI CheckNegativeX
+				Jump NegateX
+				
+				NegateX,	Load ZERO
+							Subt X
+							Store X
+				JumpI CheckNegativeX
+
+/ Negate Y if Y < 0
+CheckNegativeY,	HEX 0
+				Load NegativeYFlag
+				SkipCond 800
+				JumpI CheckNegativeY
+				Jump NegateY
+				
+				NegateY,	Load ZERO
+							Subt Y
+							Store Y
+				JumpI CheckNegativeY
+
+/ Addition
+SubAdd, HEX 0
+		Load X
+		Add Y
+		Store Result
+		JumpI SubAdd
+
+/ Subtraction
+SubSubt, 	HEX 0
+			Load X
+			Subt Y
+			Store Result
+			JumpI SubSubt
+
+/ Multiplication
+SubMul, HEX 0
+		Load ONE
+		Subt NegativeYFlag
+		SkipCond 400
+		Jump Mul
+		Jump SetPositiveY
+
+		/ Set Y to positive for to get positive value
+		SetPositiveY,	Load Y
+						Subt Y
+						Subt Y
+						Store Y
+						Jump Mul
+
+		/ Repeat CheckAddition until Y - Counter =  0
+		Mul,	Load Y
+				Subt Counter 
+				SkipCond 400
+				Jump MulAdd
+				Load ONE
+				Subt NegativeYFlag
+				SkipCond 400
+				JumpI SubMul
+				Jump NegateMulResult
+			
+				MulAdd, Load Result
+						Add X
+						Store Result
+						Load Counter
+						Add ONE
+						Store Counter
+						Jump Mul
+
+		/ Negate result if X or Y is negative
+		NegateMulResult,	Load Result
+							Subt Result
+							Subt Result
+							Store Result
+							JumpI SubMul
+						
+/ Division
+SubDiv,     HEX 0		
+            / Check X is positive or negative
+            CheckX,	Load ONE
+		            Subt NegativeXFlag
+		            SkipCond 400         
+		            Jump XIsPositive         
+		            Jump XIsNegative          
+
+			/ case: X > 0
+			XIsPositive,    Load ONE
+				            Subt NegativeYFlag
+				            SkipCond 400
+				            Jump AbsX				/ Y > 0
+				            Jump SetNegativeFlag	/ Y < 0
+
+			/ case: X is negative
+			XIsNegative,    Load ONE
+							Store NegativeResultFlag
+				            Subt NegativeYFlag
+				            SkipCond 400  
+				            Jump SetNegativeFlag 	/ Y > 0
+							
+							/ X and Y < 0, division result > 0
+							Clear
+							Store NegativeResultFlag
+				            Jump AbsX
+
+			/ Define negative result is true
+			SetNegativeFlag,	Load ONE
+						        Store NegativeResultFlag
+						        Jump AbsX
+				
+			/ Set positive X and positive Y for division	
+			AbsX,	Load ONE
+					Subt NegativeXFlag
+				    SkipCond 400
+				    Jump AbsY
+				    Load ZERO
+			        Subt X
+			        Store X
+
+			AbsY,	Load ONE
+					Subt NegativeYFlag
+			        SkipCond 400
+			        Jump StartDivision
+			        Load ZERO
+			        Subt Y
+			        Store Y
+
+			/ Begin division
+			StartDivision,  Load X
+				            Store Remainder
+				            Clear
+				            Store Result
+
+			/ End division if Remainder is negative
+			DivLoop,    Load Remainder
+			            Subt Y
+			            SkipCond 000
+			            Jump DivSubt
+						Jump SetResult
+
+			/ Store incremented, temporary result
+			DivSubt,	Store Remainder
+				        Load Result
+				    	Add ONE
+				        Store Result
+				        Jump DivLoop
+			
+			/ Check result should be negated or not
+			SetResult,  Load NegativeResultFlag
+						SkipCond 800         
+						JumpI SubDiv
+							            
+						/ Negate result then end division
+						Load ZERO
+						Subt Result
+						Store Result
+						JumpI SubDiv
+
+/ Define character address to print
+GetCharAddr, 	HEX 0
+				Load FontAddr
+	            Store Target
+	            Load PrintVal
+	            Store Tmp
+				JumpI GetCharAddr
+
+/ Give space to each digit display
+SetSpaceForDigits,	HEX 0
+					Load CurrentPos
+					Add FOUR         / Move cursor 4 pixels (3 for char + 1 space)
+					Store CurrentPos
+					
+					/ Increment character counter
+					Load CharColCount
+					Add ONE
+					Store CharColCount
+					
+					/ If CharColCount < 3, keep going. If >= 3, clear and reset.
+					Subt THREE
+					SkipCond 000     / If AC < 0 (count was 0, 1, or 2), skip reset
+					JnS RefreshDisplay
+					
+					JumpI SetSpaceForDigits
+
+CurrentPos,		DEC 0
+CharColCount,	DEC 0
+
+/ Clear screen for upcoming digits if space fully occupied
+RefreshDisplay,	HEX 0
+				JnS SubDelay
+                JnS SubClearDisplay
+                Load ScreenStart
+				Add ONE
+                Store CurrentPos
+                Clear
+                Store CharColCount
+                JumpI RefreshDisplay
+
+/ Modulo 10, returns Quotient and ModRemainder
+Mod10,	HEX 0
+		Clear
+		Store Quotient
+		ModL1,	Load ArgX
+		        Subt TEN
+		        Skipcond 000
+		        Jump ModNext
+		        Jump ModDone
+		ModNext,	Store ArgX
+		            Load Quotient
+		            Add ONE
+		            Store Quotient
+		            Jump ModL1
+	    ModDone,	Load ArgX
+	                Store ModRemainder
+	                JumpI Mod10
+
+ArgX,              	DEC 0
+Quotient,          	DEC 0
+
+/ Define digit address to print
+GetDigitAddr,	HEX 0
+				Load DigitFontAddr
+				Store Target
+	            Load PrintVal
+	            Store Tmp
+				MultLoop,	Load Tmp
+				            Skipcond 800
+				            Jump DoneMult
+				            Subt ONE
+				            Store Tmp
+				            Load Target
+				            Add FIFTEEN     
+				            Store Target
+				            Jump MultLoop
+				DoneMult,	JumpI GetDigitAddr
+
+Tmp,		DEC 0
+Target, 	DEC 0
+PrintVal,	DEC 0
+
+/ Delay 500ms before clear screen
+SubDelay,	HEX 0
+            Load DelayTime
+            Store DelayCounter
+        	DelayLoop,	Load DelayCounter
+	                    Subt ONE
+	                    Store DelayCounter
+	                    SkipCond 400
+	                    Jump DelayLoop
+	                    JumpI SubDelay
+					
+DelayCounter,	DEC 0
+DelayTime,      DEC 500
+
+///
+/// subroutine: SubInputAndExtractOperandsAndOperator
+///
+
+// Accepted input format: "{operand1}{operator}{operand2}=?" (can include negative values)
+
+SubInputAndExtractOperandsAndOperator, HEX 0
+
+	/ Get input, check question mark before end input if is '='
+	GetInputX,	Input
+				Store Chr
+				Subt Equal
+				SkipCond 400
+				Jump CheckSignX
+				Jump EndInput
+
+	GetInputY,	Input
+				Store Chr
+				Subt Equal
+				SkipCond 400
+				Jump CheckSignY
+				Jump EndInput
+
+	/ Check negative value
+	CheckSignX,	Load Chr
+				Subt Minus
+				SkipCond 400
+				Jump NotNegative
+				Jump IsNegativeX
+
+	CheckSignY,	Load Chr
+				Subt Minus
+				SkipCond 400
+				Jump NotNegative
+				Jump IsNegativeY
+
+	/ Negative value found
+	IsNegativeX,	Load ONE
+					Store NegativeXFlag
+					Jump GetOperand
+
+	IsNegativeY,	Load ONE
+					Store NegativeYFlag
+					Jump GetOperand
+
+	/ Input integer
+	GetOperand,	Input
+				Store Chr
+				Subt Equal
+				SkipCond 400
+				Jump CheckOperator
+				Jump EndInput
+
+	/ Positive value, set Operator if input any character
+	NotNegative,	Load Chr
+					Subt ASCII_0
+					SkipCond 000
+					Jump IsDigit
+					Jump SetOperator
+
+	/ Check is X, Y integer
+	IsDigit,	Load Chr
+				Subt ASCII_0
+				Store TmpDigit
+				Load FlagOperandY
+				SkipCond 400
+				Jump UpdateOperandY
+				Jump UpdateOperandX
+
+	/ Update integer for 1 digit or more
+	UpdateOperandX,	Load X
+					JnS SubMul10
+					Store Test
+					
+					Load Test
+					Add TmpDigit
+					Store X
+					Jump GetOperand
+
+	UpdateOperandY,	Load Y
+					JnS SubMul10
+					Store Test
+					
+					Load Test
+					Add TmpDigit
+					Store Y
+					Jump GetInputY
+
+	/ Check operator in input character
+	CheckOperator,	Load Chr
+					Subt ASCII_0
+					SkipCond 000
+					Jump IsDigit
+					Jump SetOperator
+
+	/ Define Operator
+	SetOperator,	Load Chr
+					Store Operator
+					Load NegativeXFlag
+					SkipCond 400
+					JnS CheckNegativeX
+					Jump SetOperandY
+
+	/ Input 2nd integer, store to Y
+	SetOperandY,	Clear
+					Store Test
+					Load ONE
+					Store FlagOperandY
+					Jump GetInputY
+
+	/ End input
+	EndInput,	JnS CheckNegativeY
+				Input
+				Store Chr
+				Subt QuestionMark
+				SkipCond 400
+				Jump EndInput
+				JumpI SubInputAndExtractOperandsAndOperator 
+
+/ local variables of SubInputAndExtractOperandsAndOperator
+Minus,			HEX 2D	/ '-'
+ASCII_0,		HEX 30	/ '0'
+Equal,			HEX 3D	/ '='
+QuestionMark,	HEX 3F  / '?'
+
+Chr,			DEC 0
+Test,			Dec 0
+TmpDigit,		DEC 0
+FlagOperandY,	DEC 0
+NegativeXFlag,	DEC 0
+NegativeYFlag,	DEC 0
+
+///
+/// subroutine: SubCal
+///
+SubCal, HEX 0
+
+	/ If X or Y = 0: result = 0, end calculation
+	Load X
+	SkipCond 400
+	Jump CheckYIsZero
+	JumpI SubCal
+
+	CheckYIsZero,	Load Y
+					SkipCond 400 
+					Jump CheckAddition
+					JumpI SubCal
+
+	/ Check Addition
+	CheckAddition,	Load Operator
+				Subt CHR_ADD
+				SkipCond 400
+				Jump CheckSubtraction
+				JnS SubAdd
+				JumpI SubCal
+
+	/ Check subtraction
+	CheckSubtraction,	Load Operator
+					Subt CHR_SUBT
+					SkipCond 400
+					Jump CheckMultiplication
+					JnS SubSubt
+					JumpI SubCal
+
+	/ Check multiplication
+	CheckMultiplication,	Load Operator
+							Subt CHR_MUL
+							SkipCond 400
+							Jump CheckDivision
+							JnS SubMul
+							JumpI SubCal
+
+	/ Check division
+	CheckDivision,	Load Operator
+					Subt CHR_DIV
+					SkipCond 400
+					Jump InvalidOpeator
+					JnS SubDiv
+					JumpI SubCal
+
+	/ Other operator: Invalid, result = 0
+	InvalidOpeator,	Clear
+					Store Result
+					JumpI SubCal
+
+/ local variables of SubCal
+CHR_ADD,	HEX 2B / '+'
+CHR_SUBT,	HEX 2D / '-'
+CHR_MUL,	HEX 2A / '*'
+CHR_DIV,	HEX 2F / '/'
+CHR_R,		HEX 52 / 'R'
+
+Counter, 			DEC 0 
+NegativeResultFlag,	DEC 0
+
+///
+/// subroutine SubTextOutput
+///
+SubTextOutput, HEX 0
+
+/ The logic
+	/ Output result
+	Load Result
+	Output
+	Load Operator
+	Subt CHR_DIV
+	SkipCond 400 / Check: is calculation a division
+	JumpI SubTextOutput
+	Jump OutputRemainder
+
+	/ Output remainder (division)
+	OutputRemainder,	Load Remainder
+						Output
+						JumpI SubTextOutput
+
+/ Add local variables of SubTextOutput here (if any)
+
+///
+/// Implement your subroutine SubClearDisplay here. (Task 3.4)
+///
+SubClearDisplay, HEX 0
+
+/ The logic
+	/ Initialise address to fill white to display
+    Load ScreenStart
+    Store TmpPtr
+    Load SIXTYFOUR
+    Store Tmp
+
+	/ Start fill white to display
+	BeginClear,	Clear
+	    		Store Cnt
+
+	/ Fill white to display 4 times
+	ClearAll,	Load White     
+			    StoreI TmpPtr
+			    Load TmpPtr
+			    Add ONE
+			    Store TmpPtr
+			    Load Cnt
+			    Add ONE
+			    Store Cnt
+			    Load Cnt
+			    Subt FOUR
+			    SkipCond 400
+			    Jump ClearAll
+
+	/ Finish up filling the display
+	FillDone,	Load Tmp
+			    Subt ONE
+			    Store Tmp
+			    Skipcond 400
+			    Jump BeginClear
+			    JumpI SubClearDisplay
+
+/ local variables of SubClearDisplay
+ScreenStart,	HEX F00
+White,       	HEX FFFF
+
+Cnt,			DEC 0
+TmpPtr,			DEC 0
+
+///
+/// subroutine SubPaintChar
+///
+/ Parameters of SubPaintChar
+PaintCharCharacter, HEX 0  
+PaintCharDisplay, HEX 0  
+SubPaintChar, HEX 0 
+
+	/ Initialise variables for print digits / letter
+	Load ScreenStart
+	Add ONE
+    Store CurrentPos
+    Clear
+    Store IsRemainder
+    Store CharColCount
+    Store DigitCount
+
+	/ If result > 0, extract and print digits 
+    Load Result
+    Skipcond 000
+    Jump PrepValue
+    
+    / Display negative sign for result < 0
+    Load DashAddr
+    Store PaintCharCharacter
+    Load CurrentPos
+    Store PaintCharDisplay
+	JnS GetCharAddr
+    JnS SubPrintCalResultToDisplay
+    JnS SetSpaceForDigits
+    
+    / Extract digits from positive result
+    Load ZERO
+    Subt Result
+    Store Value
+    Jump DigitExtract
+
+	/ Copy "result" to "value"
+	PrepValue,  Load Result
+	            Store Value
+
+	/ Extract digits from positive result
+	DigitExtract,   Store StackPtr
+	                Clear
+	                Store DigitCount
+
+	/ Division and modulo by 10 loop to extract digits from left to right, then print to display
+	LoopMod,        Load Value
+	                Store ArgX
+	                JnS Mod10
+	                Load ModRemainder
+	                StoreI StackPtr
+	                Load StackPtr
+	                Add ONE
+	                Store StackPtr
+	                Load DigitCount
+	                Add ONE
+	                Store DigitCount
+	                Load Quotient
+	                Store Value
+	                Skipcond 400   
+	                Jump LoopMod
+
+	/ If done printing all digits in result, confirm to display remainder for division  
+	PrintDigits,    Load DigitCount
+	                Skipcond 800
+	                Jump CheckRemainderState
+	                
+	                Load StackPtr
+	                Subt ONE
+	                Store StackPtr
+	                
+	                LoadI StackPtr
+	                Store PrintVal
+	                JnS GetDigitAddr
+	                Load Target
+	                Store PaintCharCharacter
+	                Load CurrentPos
+	                Store PaintCharDisplay
+	                
+	                JnS SubPrintCalResultToDisplay
+	                JnS SetSpaceForDigits / Logic now handles the 3-digit wrap/clear
+	                
+	                Load DigitCount
+	                Subt ONE
+	                Store DigitCount
+	                Jump PrintDigits
+
+	/ Confirm to print remainder character and digits to display for division
+    CheckRemainderState,	Load IsRemainder
+						    Skipcond 400
+						    JumpI SubPaintChar
+
+	/ Division found, start printing remainder character and digit from remainder
+    Load Operator
+    Subt CHR_DIV 
+    Skipcond 400
+    JumpI SubPaintChar
+
+    Load ONE
+    Store IsRemainder
+
+	/ Character display, 'R'
+    Load FontData_R_Addr
+    Store PaintCharCharacter
+    Load CurrentPos
+    Store PaintCharDisplay
+    JnS SubPrintCalResultToDisplay
+    JnS SetSpaceForDigits
+
+	/ Set remainder to "value" to display
+    Load Remainder
+    Store Value
+    Jump DigitExtract
+
+/ local variables of SubPaintChar
+Value,             	DEC 0
+StackPtr,          	DEC 0
+DigitCount,        	DEC 0
+IsRemainder,  		DEC 0
+ModRemainder,      	DEC 0
+SavedDivRemainder,	DEC 0
+
+/ Letter '-'
+DashAddr,	ADR DashFont
+DashFont,	HEX FFFF
+            HEX FFFF
+            HEX FFFF
+            HEX FFFF
+            HEX FFFF
+            HEX FFFF
+            HEX 0
+            HEX 0
+            HEX 0
+            HEX FFFF
+            HEX FFFF
+            HEX FFFF
+            HEX FFFF
+            HEX FFFF
+            HEX FFFF
+
+/ Letter 'R'
+FontData_R_Addr,	ADR FontData_R
+FontData_R,			HEX 0       / Start of 3x5 'R'
+					HEX 0
+					HEX FFFF
+					HEX 0
+					HEX FFFF
+					HEX 0
+					HEX 0
+					HEX 0
+					HEX FFFF
+					HEX 0
+					HEX FFFF
+					HEX 0
+					HEX 0
+					HEX FFFF
+					HEX 0
+
+///
+/// subroutine: SubPrintToGraphicDisplay
+///
+SubPrintCalResultToDisplay, HEX 0 
+
+	/ Initialise addresses to print result to display
+	Load PaintCharCharacter
+    Store PtrChar
+    Load PaintCharDisplay
+    Store PtrDisp
+    Load FIVE
+    Store RowCount
+
+	/ Set ColCount to 3, display digit or letter with size of 3x5 
+	OuterL,	Load THREE
+	    	Store ColCount
+
+	/ If PtrChar < 0 goto next pixel, else draw the pixel for digit
+	InnerL,	LoadI PtrChar
+		    Skipcond 000      
+		    Jump DrawPixel
+		    Jump NextPixel
+
+	/ Draw pixel to display digit
+	DrawPixel,	Load Black
+	    		StoreI PtrDisp    
+
+	/ Goto next pixel to draw next pixel for same digit
+	NextPixel,	Load PtrChar
+			    Add ONE
+			    Store PtrChar
+			    Load PtrDisp
+			    Add ONE
+			    Store PtrDisp
+			    Load ColCount
+			    Subt ONE
+			    Store ColCount
+			    Skipcond 400
+			    Jump InnerL
+			    Load PtrDisp
+			    Add THIRTEEN
+			    Store PtrDisp
+			    Load RowCount
+			    Subt ONE
+			    Store RowCount
+			    Skipcond 400
+			    Jump OuterL
+			    JumpI SubPrintCalResultToDisplay
+
+/ local variables: SubPrintCalResultToDisplay
+Black,		DEC 0
+PtrChar,  	DEC 0
+PtrDisp, 	DEC 0
+RowCount,	DEC 0
+ColCount,   DEC 0
+
+///
+/// CONSTANTS
+///
+X,			DEC 0
+Operator,	DEC 0
+Y,			DEC 0
+Result,		DEC 0
+Remainder,	DEC 0
+
+/ Integers
+ZERO, 		DEC 0
+ONE,		DEC 1
+THREE,		DEC 3
+FOUR,		DEC 4
+FIVE,   	DEC 5
+TEN,    	DEC 10
+THIRTEEN,	DEC 13
+FIFTEEN,    DEC 15
+SIXTYFOUR,	DEC 64
+EIGHTY,     DEC 80
+
+/ Other data for testing program
+PIXELOFROW2COL2, 	HEX 0F11 
+NEXTDIGIT,			DEC 15
+
+/ This is the "font", the memory that stores character data for the display.
+/ The characters are stored in the order a-z.
+/ Each character is 4 pixels wide and 8 pixels high.
+/ The data for each character is stored row by row, with each pixel
+/ being represented as ONE word that is either FFFF (white) or 0000 (black).
+
+FontAddr, ADR FontStart
+FontStart, 	HEX FFFF  / Start of character A 
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character B
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX FFFF  / Start of character C
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character D
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character E
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character F
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX FFFF  / Start of character G
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character H
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX FFFF  / Start of character I
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX FFFF  / Start of character J
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character K
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character L
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character M
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character N
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX FFFF  / Start of character O
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character P
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX FFFF  / Start of character Q
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character R
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX FFFF  / Start of character S
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character T
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character U
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character V
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character W
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character X
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character Y
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			
+			HEX 0000  / Start of character Z
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX 0000
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+			HEX FFFF
+
+DigitFontAddr, ADR DigitFontStart
+DigitFontStart, HEX FFFF     / Start of character 0
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+			  HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF       / Start of character 1
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX 0          / Start of character 2
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX 0
+		      HEX 0
+		      HEX 0          / Start of character 3
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX 0
+		      HEX 0
+		      HEX FFFF
+		      HEX 0          / Start of character 4
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX 0
+		      HEX 0
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX 0          / Start of character 5
+		      HEX 0
+		      HEX 0
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX 0
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF       / Start of character 6
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0          / Start of character 7
+		      HEX 0
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX FFFF       / Start of character 8
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF       / Start of character 9
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF       / Start of character '-'
+		      HEX FFFF
+		      HEX FFFF
+		      HEX FFFF
+		      HEX FFFF
+		      HEX FFFF
+		      HEX 0
+		      HEX 0
+		      HEX 0
+		      HEX FFFF
+		      HEX FFFF
+		      HEX FFFF
+		      HEX FFFF
+		      HEX FFFF
+		      HEX FFFF
+
+/ label to store a string to help achieve correct result
+StringAddr, ADR InputString
+InputString, DEC 0
