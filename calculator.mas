@@ -1,9 +1,8 @@
 // calculator.mas
 / A MARIE assembly calculator; It accepts a string input, ends with "=?";
-/ Extracts 2 operands, integer X and Y, and user defined operator; 
+/ Extracts 2 operands, integer X and Y, and user defined operator;
 / Accepted operator: '+', '-', '*', '/' (acceptable operators can be redefined from ascii table)
 / Then, perform arithmetic calculation, Output to "output log" and "16x16 Display".
-/ This program is Free Software; any individual can study, modify and redistribute the program for any purpose
 
 / Calling SubInputAndExtractOperandsAndOperator subroutine.
 JnS SubInputAndExtractOperandsAndOperator
@@ -206,18 +205,30 @@ SubDiv,     HEX 0
 						Store Result
 						JumpI SubDiv
 
-/ Define character address to print
-GetCharAddr, 	HEX 0
-				Load FontAddr
-	            Store Target
-	            Load PrintVal
-	            Store Tmp
-				JumpI GetCharAddr
+/ Check if screen width has been filled (3 characters max)
+CheckScreenFull, HEX 0
+                 Load CharColCount
+                 Subt THREE        / Change from FOUR to THREE
+                 SkipCond 000      / If AC < 0 (count < 3), skip reset
+                 JnS RefreshDisplay
+                 JumpI CheckScreenFull
 
-/ Give space to each digit display
+/ Give space to each digit display (3px width + 1px gap)
 SetSpaceForDigits,	HEX 0
 					Load CurrentPos
-					Add FOUR         / Move cursor 4 pixels (3 for char + 1 space)
+					Add FOUR         / Move cursor 4 pixels
+					Store CurrentPos
+					
+					/ Increment character counter
+					Load CharColCount
+					Add ONE
+					Store CharColCount
+					JumpI SetSpaceForDigits
+
+/ Give space to 4-pixel wide letter display
+SetSpaceForLetter,	HEX 0
+					Load CurrentPos
+					Add FIVE         / Move cursor 5 pixels (4 for char + 1 space)
 					Store CurrentPos
 					
 					/ Increment character counter
@@ -225,25 +236,20 @@ SetSpaceForDigits,	HEX 0
 					Add ONE
 					Store CharColCount
 					
-					/ If CharColCount < 3, keep going. If >= 3, clear and reset.
-					Subt THREE
-					SkipCond 000     / If AC < 0 (count was 0, 1, or 2), skip reset
-					JnS RefreshDisplay
-					
-					JumpI SetSpaceForDigits
+					JumpI SetSpaceForLetter
 
 CurrentPos,		DEC 0
 CharColCount,	DEC 0
 
-/ Clear screen for upcoming digits if space fully occupied
+/ Clear screen and reset pointers
 RefreshDisplay,	HEX 0
-				JnS SubDelay
-                JnS SubClearDisplay
+				JnS SubDelay         / Wait so user can read result
+				JnS SubClearDisplay  / Clear the 16x16 grid
                 Load ScreenStart
-				Add ONE
+				Add ONE              / Start at the first available pixel
                 Store CurrentPos
                 Clear
-                Store CharColCount
+                Store CharColCount   / Reset counter to 0
                 JumpI RefreshDisplay
 
 / Modulo 10, returns Quotient and ModRemainder
@@ -265,7 +271,7 @@ Mod10,	HEX 0
 	                JumpI Mod10
 
 ArgX,              	DEC 0
-Quotient,          	DEC 0
+Quotient,      		DEC 0
 
 / Define digit address to print
 GetDigitAddr,	HEX 0
@@ -307,7 +313,6 @@ DelayTime,      DEC 500
 ///
 
 // Accepted input format: "{operand1}{operator}{operand2}=?" (can include negative values)
-
 SubInputAndExtractOperandsAndOperator, HEX 0
 
 	/ Get input, check question mark before end input if is '='
@@ -426,7 +431,6 @@ Minus,			HEX 2D	/ '-'
 ASCII_0,		HEX 30	/ '0'
 Equal,			HEX 3D	/ '='
 QuestionMark,	HEX 3F  / '?'
-
 Chr,			DEC 0
 Test,			Dec 0
 TmpDigit,		DEC 0
@@ -517,10 +521,8 @@ SubTextOutput, HEX 0
 						Output
 						JumpI SubTextOutput
 
-/ Add local variables of SubTextOutput here (if any)
-
 ///
-/// Implement your subroutine SubClearDisplay here. (Task 3.4)
+/// Implement your subroutine SubClearDisplay here.
 ///
 SubClearDisplay, HEX 0
 
@@ -571,27 +573,29 @@ TmpPtr,			DEC 0
 PaintCharCharacter, HEX 0  
 PaintCharDisplay, HEX 0  
 SubPaintChar, HEX 0 
-
 	/ Initialise variables for print digits / letter
-	Load ScreenStart
-	Add ONE
-    Store CurrentPos
+	Load ScreenStart    / Start of display memory (F00)
+    Add ONE             / Offset for better visibility (F01)
+    Store CurrentPos    / Reset cursor to far left 
+    
+    / 2. Reset character tracking
     Clear
-    Store IsRemainder
-    Store CharColCount
-    Store DigitCount
+    Store CharColCount  / Reset horizontal count 
+    Store IsRemainder   / Clear remainder flag
+    Store DigitCount    / Reset digit stack count
 
 	/ If result > 0, extract and print digits 
     Load Result
     Skipcond 000
     Jump PrepValue
-    
-    / Display negative sign for result < 0
-    Load DashAddr
+	
+    / Display negative sign for result < 0. Uses offset 150 (10th index in DigitFontStart)
+    Load DigitFontAddr
+    Add ONEFIFTY
     Store PaintCharCharacter
     Load CurrentPos
     Store PaintCharDisplay
-	JnS GetCharAddr
+    JnS CheckScreenFull
     JnS SubPrintCalResultToDisplay
     JnS SetSpaceForDigits
     
@@ -628,24 +632,30 @@ SubPaintChar, HEX 0
 	                Jump LoopMod
 
 	/ If done printing all digits in result, confirm to display remainder for division  
+	/ Loop to print each extracted digit
 	PrintDigits,    Load DigitCount
-	                Skipcond 800
+	                Skipcond 800     / If no more digits, check remainder
 	                Jump CheckRemainderState
-	                
+	          
 	                Load StackPtr
 	                Subt ONE
 	                Store StackPtr
+	                
+	                / Refresh check before drawing
+	                JnS CheckScreenFull / If full, this resets CurrentPos to F01
 	                
 	                LoadI StackPtr
 	                Store PrintVal
 	                JnS GetDigitAddr
 	                Load Target
 	                Store PaintCharCharacter
-	                Load CurrentPos
-	                Store PaintCharDisplay
 	                
+	                / CurrentPos is now guaranteed to be correct (Left if just refreshed)
+	                Load CurrentPos
+	                Store PaintCharDisplay 
+	        
 	                JnS SubPrintCalResultToDisplay
-	                JnS SetSpaceForDigits / Logic now handles the 3-digit wrap/clear
+	                JnS SetSpaceForDigits
 	                
 	                Load DigitCount
 	                Subt ONE
@@ -666,13 +676,15 @@ SubPaintChar, HEX 0
     Load ONE
     Store IsRemainder
 
-	/ Character display, 'R'
-    Load FontData_R_Addr
+	/ Character display, 'R'. Uses offset 544 (17th index in FontStart for letter R)
+    Load FontAddr
+    Add FIVEFORTYFOUR
     Store PaintCharCharacter
     Load CurrentPos
     Store PaintCharDisplay
-    JnS SubPrintCalResultToDisplay
-    JnS SetSpaceForDigits
+    JnS CheckScreenFull
+    JnS SubPrint4x8
+    JnS SetSpaceForLetter
 
 	/ Set remainder to "value" to display
     Load Remainder
@@ -684,47 +696,11 @@ Value,             	DEC 0
 StackPtr,          	DEC 0
 DigitCount,        	DEC 0
 IsRemainder,  		DEC 0
-ModRemainder,      	DEC 0
+ModRemainder,       DEC 0
 SavedDivRemainder,	DEC 0
 
-/ Letter '-'
-DashAddr,	ADR DashFont
-DashFont,	HEX FFFF
-            HEX FFFF
-            HEX FFFF
-            HEX FFFF
-            HEX FFFF
-            HEX FFFF
-            HEX 0
-            HEX 0
-            HEX 0
-            HEX FFFF
-            HEX FFFF
-            HEX FFFF
-            HEX FFFF
-            HEX FFFF
-            HEX FFFF
-
-/ Letter 'R'
-FontData_R_Addr,	ADR FontData_R
-FontData_R,			HEX 0       / Start of 3x5 'R'
-					HEX 0
-					HEX FFFF
-					HEX 0
-					HEX FFFF
-					HEX 0
-					HEX 0
-					HEX 0
-					HEX FFFF
-					HEX 0
-					HEX FFFF
-					HEX 0
-					HEX 0
-					HEX FFFF
-					HEX 0
-
 ///
-/// subroutine: SubPrintToGraphicDisplay
+/// subroutine: SubPrintCalResultToDisplay (3x5 pixel drawing)
 ///
 SubPrintCalResultToDisplay, HEX 0 
 
@@ -772,7 +748,54 @@ SubPrintCalResultToDisplay, HEX 0
 			    Jump OuterL
 			    JumpI SubPrintCalResultToDisplay
 
-/ local variables: SubPrintCalResultToDisplay
+///
+/// subroutine: SubPrint4x8 (4x8 pixel drawing for standard alphabet)
+///
+SubPrint4x8, HEX 0 
+
+	/ Initialise addresses to print 4x8 letter to display
+	Load PaintCharCharacter
+    Store PtrChar
+    Load PaintCharDisplay
+    Store PtrDisp
+    Load EIGHT
+    Store RowCount
+
+	/ Set ColCount to 4
+	OuterL8,	Load FOUR
+	    	    Store ColCount
+
+	InnerL8,	LoadI PtrChar
+		        Skipcond 000      
+		        Jump DrawPixel8
+		        Jump NextPixel8
+
+	DrawPixel8,	Load Black
+	    		StoreI PtrDisp    
+
+	NextPixel8,	Load PtrChar
+			    Add ONE
+			    Store PtrChar
+			    Load PtrDisp
+			    Add ONE
+			    Store PtrDisp
+			    Load ColCount
+			    Subt ONE
+			    Store ColCount
+			    Skipcond 400
+			    Jump InnerL8
+			    Load PtrDisp
+			    Add TWELVE
+			    Store PtrDisp
+			    Load RowCount
+			    Subt ONE
+			    Store RowCount
+			    Skipcond 400
+			    Jump OuterL8
+			    JumpI SubPrint4x8
+
+
+/ local variables: SubPrintCalResultToDisplay and SubPrint4x8
 Black,		DEC 0
 PtrChar,  	DEC 0
 PtrDisp, 	DEC 0
@@ -794,11 +817,15 @@ ONE,		DEC 1
 THREE,		DEC 3
 FOUR,		DEC 4
 FIVE,   	DEC 5
+EIGHT,      DEC 8
 TEN,    	DEC 10
+TWELVE,     DEC 12
 THIRTEEN,	DEC 13
 FIFTEEN,    DEC 15
 SIXTYFOUR,	DEC 64
 EIGHTY,     DEC 80
+ONEFIFTY,   DEC 150
+FIVEFORTYFOUR, DEC 544
 
 / Other data for testing program
 PIXELOFROW2COL2, 	HEX 0F11 
@@ -809,7 +836,6 @@ NEXTDIGIT,			DEC 15
 / Each character is 4 pixels wide and 8 pixels high.
 / The data for each character is stored row by row, with each pixel
 / being represented as ONE word that is either FFFF (white) or 0000 (black).
-
 FontAddr, ADR FontStart
 FontStart, 	HEX FFFF  / Start of character A 
 			HEX 0000
@@ -1670,7 +1696,7 @@ FontStart, 	HEX FFFF  / Start of character A
 			HEX FFFF
 
 DigitFontAddr, ADR DigitFontStart
-DigitFontStart, HEX FFFF     / Start of character 0
+DigitFontStart, HEX FFFF      / Start of character 0
 		      HEX 0
 		      HEX FFFF
 		      HEX 0
@@ -1760,7 +1786,7 @@ DigitFontStart, HEX FFFF     / Start of character 0
 		      HEX 0
 		      HEX 0
 		      HEX FFFF
-		      HEX FFFF       / Start of character 6
+		      HEX FFFF        / Start of character 6
 		      HEX 0
 		      HEX FFFF
 		      HEX 0
