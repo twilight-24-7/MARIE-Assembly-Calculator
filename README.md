@@ -10,3 +10,5 @@ Download / copy and upload / paste calculator.mas to MARIE.js intepreter: https:
 Click "Assemble" to compile program, then click "Run" to execute program 
 
 You may adjust execution speed, click "step" / "microstep" to visualize how instructions are executed
+
+Accepted input format: "{operand1}{operator}{operand2}=?" (can include negative values)
