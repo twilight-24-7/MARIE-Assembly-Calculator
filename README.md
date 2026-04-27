@@ -12,3 +12,5 @@ Click "Assemble" to compile program, then click "Run" to execute program
 You may adjust execution speed, click "step" / "microstep" to visualize how instructions are executed
 
 Accepted input format: "{operand1}{operator}{operand2}=?" (can include negative values)
+
+// Note: this program only works correctly for valid input. Other inputs may cause unexpected behaviour.
