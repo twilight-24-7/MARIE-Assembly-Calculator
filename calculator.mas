@@ -30,9 +30,9 @@ JnS SubPrintCalResultToDisplay
 / End of main program.
 Halt
 
-// Helpful subroutines for main program
+/// Subroutines for main program
 
-/ Multiply current input digit by 10
+// subroutine: SubMul10 (Multiply current input digit by 10)
 SubMul10,	HEX 0
 			Store MulTmp
 			Add MulTmp
@@ -45,7 +45,7 @@ SubMul10,	HEX 0
 			
 MulTmp,	DEC 0
 
-/ Negate X if X < 0
+// subroutine: CheckNegativeX (Negate X if X < 0)
 CheckNegativeX,	HEX 0
 				Load NegativeXFlag
 				SkipCond 800
@@ -57,7 +57,7 @@ CheckNegativeX,	HEX 0
 							Store X
 				JumpI CheckNegativeX
 
-/ Negate Y if Y < 0
+// subroutine: CheckNegativeY (Negate Y if Y < 0)
 CheckNegativeY,	HEX 0
 				Load NegativeYFlag
 				SkipCond 800
@@ -69,21 +69,21 @@ CheckNegativeY,	HEX 0
 							Store Y
 				JumpI CheckNegativeY
 
-/ Addition
+// subroutine: Addition
 SubAdd, HEX 0
 		Load X
 		Add Y
 		Store Result
 		JumpI SubAdd
 
-/ Subtraction
+// subroutine: Subtraction
 SubSubt, 	HEX 0
 			Load X
 			Subt Y
 			Store Result
 			JumpI SubSubt
 
-/ Multiplication
+// subroutine: Multiplication
 SubMul, HEX 0
 		Load ONE
 		Subt NegativeYFlag
@@ -123,8 +123,8 @@ SubMul, HEX 0
 							Subt Result
 							Store Result
 							JumpI SubMul
-						
-/ Division
+
+// subroutine: Division
 SubDiv,     HEX 0		
             / Check X is positive or negative
             CheckX,	Load ONE
@@ -205,7 +205,7 @@ SubDiv,     HEX 0
 						Store Result
 						JumpI SubDiv
 
-/ Check if screen width has been filled (3 characters max)
+// subroutine: CheckScreenFull (Check if screen width has been filled (3 characters max))
 CheckScreenFull, HEX 0
                  Load CharColCount
                  Subt THREE        / Change from FOUR to THREE
@@ -213,7 +213,7 @@ CheckScreenFull, HEX 0
                  JnS RefreshDisplay
                  JumpI CheckScreenFull
 
-/ Give space to each digit display (3px width + 1px gap)
+// subroutine: SetSpaceForDigits (Give space to each digit display (3px width + 1px gap))
 SetSpaceForDigits,	HEX 0
 					Load CurrentPos
 					Add FOUR         / Move cursor 4 pixels
@@ -225,7 +225,7 @@ SetSpaceForDigits,	HEX 0
 					Store CharColCount
 					JumpI SetSpaceForDigits
 
-/ Give space to 4-pixel wide letter display
+// subroutine: SetSpaceForLetter (Give space to 4-pixel wide letter display)
 SetSpaceForLetter,	HEX 0
 					Load CurrentPos
 					Add FIVE         / Move cursor 5 pixels (4 for char + 1 space)
@@ -241,7 +241,7 @@ SetSpaceForLetter,	HEX 0
 CurrentPos,		DEC 0
 CharColCount,	DEC 0
 
-/ Clear screen and reset pointers
+// subroutine: RefreshDisplay (Clear screen and reset pointers)
 RefreshDisplay,	HEX 0
 				JnS SubDelay         / Wait so user can read result
 				JnS SubClearDisplay  / Clear the 16x16 grid
@@ -252,7 +252,7 @@ RefreshDisplay,	HEX 0
                 Store CharColCount   / Reset counter to 0
                 JumpI RefreshDisplay
 
-/ Modulo 10, returns Quotient and ModRemainder
+// subroutine: Mod10 (Modulo 10, returns digit to print)
 Mod10,	HEX 0
 		Clear
 		Store Quotient
@@ -273,7 +273,7 @@ Mod10,	HEX 0
 ArgX,              	DEC 0
 Quotient,      		DEC 0
 
-/ Define digit address to print
+// subroutine: GetDigitAddr (Define digit address to print)
 GetDigitAddr,	HEX 0
 				Load DigitFontAddr
 				Store Target
@@ -294,7 +294,7 @@ Tmp,		DEC 0
 Target, 	DEC 0
 PrintVal,	DEC 0
 
-/ Delay 500ms before clear screen
+// subroutine: SubDelay (Delay 500ms before clear screen)
 SubDelay,	HEX 0
             Load DelayTime
             Store DelayCounter
@@ -308,11 +308,61 @@ SubDelay,	HEX 0
 DelayCounter,	DEC 0
 DelayTime,      DEC 500
 
-///
-/// subroutine: SubInputAndExtractOperandsAndOperator
-///
+// subroutine: SubPrint4x8 (4x8 pixel drawing for standard alphabet)
+SubPrint4x8, HEX 0 
 
-// Accepted input format: "{operand1}{operator}{operand2}=?" (can include negative values)
+	/ Initialise addresses to print 4x8 letter to display
+	Load PaintCharCharacter
+    Store PtrChar
+    Load PaintCharDisplay
+    Store PtrDisp
+    Load EIGHT
+    Store RowCount
+
+	/ Set ColCount to 4
+	OuterL8,	Load FOUR
+	    	    Store ColCount
+
+	InnerL8,	LoadI PtrChar
+		        Skipcond 000      
+		        Jump DrawPixel8
+		        Jump NextPixel8
+
+	DrawPixel8,	Load Black
+	    		StoreI PtrDisp    
+
+	NextPixel8,	Load PtrChar
+			    Add ONE
+			    Store PtrChar
+			    Load PtrDisp
+			    Add ONE
+			    Store PtrDisp
+			    Load ColCount
+			    Subt ONE
+			    Store ColCount
+			    Skipcond 400
+			    Jump InnerL8
+			    Load PtrDisp
+			    Add TWELVE
+			    Store PtrDisp
+			    Load RowCount
+			    Subt ONE
+			    Store RowCount
+			    Skipcond 400
+			    Jump OuterL8
+			    JumpI SubPrint4x8
+
+
+/ local variables: SubPrintCalResultToDisplay and SubPrint4x8
+Black,		DEC 0
+PtrChar,  	DEC 0
+PtrDisp, 	DEC 0
+RowCount,	DEC 0
+ColCount,   DEC 0
+
+// subroutine: SubInputAndExtractOperandsAndOperator
+
+/ Accepted input format: "{operand1}{operator}{operand2}=?" (can include negative values)
 SubInputAndExtractOperandsAndOperator, HEX 0
 
 	/ Get input, check question mark before end input if is '='
@@ -438,9 +488,7 @@ FlagOperandY,	DEC 0
 NegativeXFlag,	DEC 0
 NegativeYFlag,	DEC 0
 
-///
-/// subroutine: SubCal
-///
+// subroutine: SubCal
 SubCal, HEX 0
 
 	/ If X or Y = 0: result = 0, end calculation
@@ -501,9 +549,7 @@ CHR_R,		HEX 52 / 'R'
 Counter, 			DEC 0 
 NegativeResultFlag,	DEC 0
 
-///
-/// subroutine SubTextOutput
-///
+// subroutine: SubTextOutput
 SubTextOutput, HEX 0
 
 / The logic
@@ -521,9 +567,7 @@ SubTextOutput, HEX 0
 						Output
 						JumpI SubTextOutput
 
-///
-/// Implement your subroutine SubClearDisplay here.
-///
+// subroutine: SubClearDisplay
 SubClearDisplay, HEX 0
 
 / The logic
@@ -566,13 +610,13 @@ White,       	HEX FFFF
 Cnt,			DEC 0
 TmpPtr,			DEC 0
 
-///
-/// subroutine SubPaintChar
-///
-/ Parameters of SubPaintChar
+/ Parameters
 PaintCharCharacter, HEX 0  
 PaintCharDisplay, HEX 0  
+
+// subroutine: SubPaintChar
 SubPaintChar, HEX 0 
+
 	/ Initialise variables for print digits / letter
 	Load ScreenStart    / Start of display memory (F00)
     Add ONE             / Offset for better visibility (F01)
@@ -699,9 +743,8 @@ IsRemainder,  		DEC 0
 ModRemainder,       DEC 0
 SavedDivRemainder,	DEC 0
 
-///
-/// subroutine: SubPrintCalResultToDisplay (3x5 pixel drawing)
-///
+
+// subroutine: SubPrintCalResultToDisplay (3x5 pixel drawing)
 SubPrintCalResultToDisplay, HEX 0 
 
 	/ Initialise addresses to print result to display
@@ -748,63 +791,8 @@ SubPrintCalResultToDisplay, HEX 0
 			    Jump OuterL
 			    JumpI SubPrintCalResultToDisplay
 
-///
-/// subroutine: SubPrint4x8 (4x8 pixel drawing for standard alphabet)
-///
-SubPrint4x8, HEX 0 
-
-	/ Initialise addresses to print 4x8 letter to display
-	Load PaintCharCharacter
-    Store PtrChar
-    Load PaintCharDisplay
-    Store PtrDisp
-    Load EIGHT
-    Store RowCount
-
-	/ Set ColCount to 4
-	OuterL8,	Load FOUR
-	    	    Store ColCount
-
-	InnerL8,	LoadI PtrChar
-		        Skipcond 000      
-		        Jump DrawPixel8
-		        Jump NextPixel8
-
-	DrawPixel8,	Load Black
-	    		StoreI PtrDisp    
-
-	NextPixel8,	Load PtrChar
-			    Add ONE
-			    Store PtrChar
-			    Load PtrDisp
-			    Add ONE
-			    Store PtrDisp
-			    Load ColCount
-			    Subt ONE
-			    Store ColCount
-			    Skipcond 400
-			    Jump InnerL8
-			    Load PtrDisp
-			    Add TWELVE
-			    Store PtrDisp
-			    Load RowCount
-			    Subt ONE
-			    Store RowCount
-			    Skipcond 400
-			    Jump OuterL8
-			    JumpI SubPrint4x8
-
-
-/ local variables: SubPrintCalResultToDisplay and SubPrint4x8
-Black,		DEC 0
-PtrChar,  	DEC 0
-PtrDisp, 	DEC 0
-RowCount,	DEC 0
-ColCount,   DEC 0
-
-///
-/// CONSTANTS
-///
+ 
+// CONSTANTS
 X,			DEC 0
 Operator,	DEC 0
 Y,			DEC 0
@@ -827,7 +815,7 @@ EIGHTY,     DEC 80
 ONEFIFTY,   DEC 150
 FIVEFORTYFOUR, DEC 544
 
-/ Other data for testing program
+/ Data for testing program
 PIXELOFROW2COL2, 	HEX 0F11 
 NEXTDIGIT,			DEC 15
 
